@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<title>姿勢チェックミニゲーム（GitHub Pages版）</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+
+<!-- ✅ TensorFlow.js -->
+<script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.9.0"></script>
+<!-- ✅ MediaPipe Pose -->
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/pose"></script>
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils"></script>
+
+<style>
+body{font-family:system-ui,Arial;background:#f9fbff;margin:0;color:#0f172a;text-align:center;}
+h1{margin:16px 0;color:#2563eb;}
+#wrap{display:flex;justify-content:center;gap:20px;flex-wrap:wrap;margin:20px auto;max-width:1200px;}
+#videoWrap{position:relative;}
+video,canvas{border-radius:8px;border:1px solid #cbd5e1;}
+#info{width:300px;text-align:left;}
+#label{font-size:22px;font-weight:bold;margin-top:10px;}
+#hint{color:#64748b;margin-top:5px;}
+button{margin-top:15px;padding:10px 20px;border:none;border-radius:8px;background:#2563eb;color:#fff;cursor:pointer;}
+</style>
+</head>
+
+<body>
+<h1>姿勢チェックミニゲーム</h1>
+<div id="wrap">
+  <div id="videoWrap">
+    <video id="webcam" autoplay playsinline muted width="640" height="480"></video>
+    <canvas id="overlay" width="640" height="480"></canvas>
+  </div>
+  <div id="info">
+    <div id="label">モデル準備中...</div>
+    <div id="hint">姿勢に応じて分類されます。</div>
+    <button id="btnStart">開始</button>
+  </div>
+</div>
+
+<script>
+const MODEL_URL = "./model/model.json";   // ✅ 你的模型路径
+const VIDEO_W = 640, VIDEO_H = 480;
+let running=false, model=null;
+const labels=["背景","正しい姿勢","猫背","椅子にもたれる"];
+const video=document.getElementById("webcam");
+const overlay=document.getElementById("overlay");
+const octx=overlay.getContext("2d");
+const labelEl=document.getElementById("label");
+
+async function initCamera(){
+  const stream = await navigator.mediaDevices.getUserMedia({video:{width:VIDEO_W,height:VIDEO_H}});
+  video.srcObject = stream;
+  await video.play();
+  console.log("✅ カメラ起動完了");
+}
+
+async function loadModel(){
+  try{
+    model = await tf.loadLayersModel(MODEL_URL);
+    console.log("✅ モデル読み込み完了");
+    labelEl.textContent="モデル読み込み完了。開始できます。";
+  }catch(e){
+    console.error("モデル読み込み失敗:", e);
+    labelEl.textContent="❌ モデル読み込み失敗";
+  }
+}
+
+// ✅ 初始化 MediaPipe Pose
+const pose=new Pose({locateFile:(f)=>`https://cdn.jsdelivr.net/npm/@mediapipe/pose/${f}`});
+pose.setOptions({modelComplexity:1,smoothLandmarks:true,minDetectionConfidence:0.5,minTrackingConfidence:0.5});
+pose.onResults(onPoseResults);
+
+async function detectLoop(){
+  if(!running)return;
+  await pose.send({image:video});
+  requestAnimationFrame(detectLoop);
+}
+
+function onPoseResults(results){
+  octx.clearRect(0,0,VIDEO_W,VIDEO_H);
+  octx.drawImage(results.image,0,0,VIDEO_W,VIDEO_H);
+  if(!results.poseLandmarks || !model)return;
+  const inputs=[];
+  results.poseLandmarks.forEach(p=>inputs.push(p.x,p.y,p.z,p.visibility));
+  const tensor=tf.tensor([inputs]);
+  const preds=model.predict(tensor);
+  preds.array().then(arr=>{
+    const probs=arr[0];
+    const maxIdx=probs.indexOf(Math.max(...probs));
+    const label=labels[maxIdx];
+    const prob=(probs[maxIdx]*100).toFixed(1);
+    labelEl.textContent=`${label} (${prob}%)`;
+    tf.dispose([tensor,preds]);
+  });
+}
+
+document.getElementById("btnStart").onclick=async()=>{
+  await loadModel();
+  await initCamera();
+  running=true;
+  detectLoop();
+};
+</script>
+</body>
+</html>
+
+
