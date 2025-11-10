@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<title>結果表示 - 姿勢チェック</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<style>
+body{font-family:system-ui,Arial;background:#f9fbff;color:#0f172a;text-align:center;margin:0;}
+h1{color:#2563eb;margin-top:20px;}
+canvas{max-width:400px;margin:30px auto;}
+button{margin-top:20px;padding:10px 20px;border:none;border-radius:8px;background:#2563eb;color:#fff;cursor:pointer;}
+</style>
+</head>
+<body>
+<h1>姿勢チェック結果</h1>
+<canvas id="chart"></canvas>
+<button onclick="goBack()">もう一度挑戦する</button>
+
+<script>
+const ctx=document.getElementById("chart");
+const stats=JSON.parse(localStorage.getItem("poseStats")||'{"correct":0,"incorrect":0,"total":0}');
+const correct=stats.correct,incorrect=stats.incorrect;
+new Chart(ctx,{type:'pie',data:{labels:['正しい姿勢','誤り姿勢'],datasets:[{data:[correct,incorrect],backgroundColor:['#22c55e','#ef4444']}]},options:{plugins:{legend:{position:'bottom'}}}});
+function goBack(){window.location.href="index.html";}
+</script>
+</body>
+</html>
