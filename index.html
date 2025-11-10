@@ -57,7 +57,7 @@ async function initCamera(){
 
 async function loadModel(){
   try{
-    model = await tf.loadLayersModel(MODEL_URL);
+    model = await tf.loadLayersModel("./resource/model/model.json");
     console.log("✅ モデル読み込み完了");
     labelEl.textContent="モデル読み込み完了。開始できます。";
   }catch(e){
@@ -104,5 +104,3 @@ document.getElementById("btnStart").onclick=async()=>{
 </script>
 </body>
 </html>
-
-
