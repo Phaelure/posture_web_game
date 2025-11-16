@@ -1,0 +1,333 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8" />
+<title>姿勢チェックミニゲーム</title>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<!-- MediaPipe Pose -->
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/pose"></script>
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils"></script>
+<style>
+  :root{
+    --blue:#2b6cb0; --blue-soft:#e6f0ff; --border:#bcd3ff;
+    --ok:#2f855a; --warn:#c53030; --text:#0a2540; --muted:#64748b;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial;background:#fff;color:var(--text)}
+  header{padding:18px 24px;border-bottom:1px solid var(--border)}
+  header h1{margin:0;color:var(--blue);font-size:20px}
+  .container{max-width:1100px;margin:20px auto;padding:0 20px}
+  .card{border:1px solid var(--border);border-radius:12px;background:#fff;box-shadow:0 4px 14px rgba(0,0,0,.05);padding:16px}
+  #grid{display:grid;gap:16px;grid-template-columns: 2fr 1fr}
+  #videoWrap{position:relative;border:1px solid var(--border);border-radius:12px;background:var(--blue-soft);overflow:hidden;min-height:480px}
+  #webcam{display:block;width:640px;height:480px}
+  #overlay{position:absolute;left:0;top:0;width:640px;height:480px;pointer-events:none}
+  #rightPane{display:flex;flex-direction:column;gap:12px}
+  .panel{border:1px solid var(--border);border-radius:12px;padding:12px}
+  .panel h3{margin:0 0 8px 0;color:var(--blue);font-size:15px}
+  #jelly{display:flex;flex-direction:column;align-items:center;gap:8px}
+  #jelly img{width:180px;height:auto;user-select:none}
+  #statusText{font-weight:700}
+  .controls{display:flex;gap:10px;flex-wrap:wrap}
+  button{appearance:none;border:1px solid var(--border);background:#fff;color:var(--text);border-radius:10px;padding:10px 16px;cursor:pointer;font-weight:700}
+  button.primary{background:var(--blue);color:#fff;border-color:var(--blue)}
+  button.gray{background:#475569;color:#fff;border-color:#475569}
+  .sound.on{background:#e9f5ff;border-color:#8ab0ff}
+  #report{display:none}
+  #reportGrid{display:grid;gap:16px;grid-template-columns: 1.2fr 1fr}
+  #pieWrap{border:1px solid var(--border);border-radius:12px;padding:12px;display:flex;align-items:center;justify-content:center;min-height:420px}
+  #details{border:1px solid var(--border);border-radius:12px;padding:12px}
+  .stat{display:flex;justify-content:space-between;padding:10px 0;border-bottom:1px dashed #e5e7eb}
+  .stat:last-child{border-bottom:none}
+  .muted{color:var(--muted)}
+  @media(max-width:900px){#grid,#reportGrid{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<header class="container"><h1>姿勢チェックミニゲーム</h1></header>
+
+<main class="container">
+  <!-- 实时识别页 -->
+  <section id="app" class="card">
+    <div id="grid">
+      <!-- 左侧：摄像头 + 骨架叠加 -->
+      <div id="videoWrap">
+        <video id="webcam" autoplay playsinline muted width="640" height="480"></video>
+        <canvas id="overlay" width="640" height="480"></canvas>
+      </div>
+
+      <!-- 右侧：水母 + 控制 + 状态 -->
+      <div id="rightPane">
+        <div class="panel" id="jelly">
+          <h3>フィードバック</h3>
+          <img id="jellyImg" src="背景水母.png" alt="jellyfish" />
+          <div id="statusText" class="muted">未開始</div>
+          <div id="hintText" class="muted">「開始」を押して計測を始めます。</div>
+        </div>
+
+        <div class="panel">
+          <h3>コントロール</h3>
+          <div class="controls">
+            <button id="btnStart" class="primary">開始</button>
+            <button id="btnStop" class="gray" disabled>終了</button>
+            <button id="btnSound" class="sound on">音声 ON</button>
+          </div>
+        </div>
+
+        <div class="panel">
+          <h3>ステータス</h3>
+          <div>サンプル数：<span id="sampleCount">0</span></div>
+          <div>現在：<span id="currentLabel">-</span></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 统计报告页 -->
+  <section id="report" class="card">
+    <h3 style="color:var(--blue);margin-top:0;">レポート</h3>
+    <div id="reportGrid">
+      <div id="pieWrap"><canvas id="pie" width="420" height="420"></canvas></div>
+      <div id="details">
+        <div class="stat"><span>正しい姿勢</span><strong id="statGood">0</strong></div>
+        <div class="stat"><span>猫背（前のめり）</span><strong id="statForward">0</strong></div>
+        <div class="stat"><span>椅子にもたれる（後傾）</span><strong id="statLean">0</strong></div>
+        <div class="stat"><span>合計</span><strong id="statTotal">0</strong></div>
+        <div class="stat"><span>正しい姿勢率</span><strong id="statRate">0%</strong></div>
+        <div style="margin-top:10px;">
+          <button id="btnBack" class="primary">戻る</button>
+        </div>
+        <p class="muted" style="margin-top:10px;">※ このページは「終了」を押した後に表示されます。</p>
+      </div>
+    </div>
+  </section>
+</main>
+
+<!-- 音效 -->
+<audio id="sndBubbles" src="bubbles.wav" preload="auto"></audio>
+<audio id="sndOcean" src="ocean wave.wav" preload="auto"></audio>
+
+<script>
+/* ===== 配置与状态 ===== */
+const VIDEO_W = 640, VIDEO_H = 480;
+const TH_LOWER = 80;   // <80° = 前倾（猫背）
+const TH_UPPER = 100;  // >100° = 靠背（後傾）
+let running = false, soundOn = true, currentGroup = "idle";
+
+const video = document.getElementById("webcam");
+const overlay = document.getElementById("overlay");
+const octx = overlay.getContext("2d");
+
+const jellyImg = document.getElementById("jellyImg");
+const statusText = document.getElementById("statusText");
+const hintText = document.getElementById("hintText");
+const btnStart = document.getElementById("btnStart");
+const btnStop = document.getElementById("btnStop");
+const btnSound = document.getElementById("btnSound");
+const btnBack = document.getElementById("btnBack");
+
+const labelNow = document.getElementById("currentLabel");
+const sampleCountEl = document.getElementById("sampleCount");
+
+const sndBubbles = document.getElementById("sndBubbles");
+const sndOcean = document.getElementById("sndOcean");
+
+const appView = document.getElementById("app");
+const reportView = document.getElementById("report");
+const statGood = document.getElementById("statGood");
+const statForward = document.getElementById("statForward");
+const statLean = document.getElementById("statLean");
+const statTotal = document.getElementById("statTotal");
+const statRate = document.getElementById("statRate");
+const pieCanvas = document.getElementById("pie");
+
+let counts = { good:0, forward:0, lean:0, total:0 };
+
+/* ===== 摄像头 ===== */
+async function initCamera(){
+  const stream = await navigator.mediaDevices.getUserMedia({
+    video: { width: VIDEO_W, height: VIDEO_H }
+  });
+  video.srcObject = stream;
+  await video.play();
+}
+
+/* ===== MediaPipe Pose ===== */
+const pose = new Pose({
+  locateFile: f => `https://cdn.jsdelivr.net/npm/@mediapipe/pose/${f}`
+});
+pose.setOptions({
+  modelComplexity: 1,
+  smoothLandmarks: true,
+  enableSegmentation: false,
+  minDetectionConfidence: 0.5,
+  minTrackingConfidence: 0.5
+});
+pose.onResults(onResults);
+
+function angleAtHip(shoulder, hip, knee){
+  // 计算肩-臀 与 膝-臀 两向量夹角（度）
+  const v1 = {x: shoulder.x - hip.x, y: shoulder.y - hip.y};
+  const v2 = {x: knee.x - hip.x, y: knee.y - hip.y};
+  const dot = v1.x*v2.x + v1.y*v2.y;
+  const n1 = Math.hypot(v1.x, v1.y), n2 = Math.hypot(v2.x, v2.y);
+  if (n1 === 0 || n2 === 0) return 90;
+  let cos = dot / (n1*n2);
+  cos = Math.max(-1, Math.min(1, cos));
+  return Math.abs(Math.acos(cos) * 180 / Math.PI);
+}
+
+function switchGroup(group){
+  if (currentGroup === group) return;
+  currentGroup = group;
+  if (group === "good"){
+    jellyImg.src = "正しい姿勢水母.png";
+    statusText.textContent = "Good!";
+    statusText.style.color = "#2f855a";
+    hintText.textContent = "ナイス！その姿勢をキープ";
+    if (soundOn) { sndBubbles.pause(); sndBubbles.currentTime = 0; sndBubbles.play(); }
+  } else if (group === "forward"){
+    jellyImg.src = "猫背水母.png";
+    statusText.textContent = "猫背（前のめり）";
+    statusText.style.color = "#c53030";
+    hintText.textContent = "胸を開き、肩を下げましょう";
+    if (soundOn) { sndOcean.pause(); sndOcean.currentTime = 0; sndOcean.play(); }
+  } else if (group === "lean"){
+    jellyImg.src = "椅子にもたれる水母.png";
+    statusText.textContent = "椅子にもたれる（後傾）";
+    statusText.style.color = "#c53030";
+    hintText.textContent = "背もたれから少し離れます";
+    if (soundOn) { sndOcean.pause(); sndOcean.currentTime = 0; sndOcean.play(); }
+  } else {
+    jellyImg.src = "背景水母.png";
+    statusText.textContent = "未開始";
+    statusText.style.color = "#64748b";
+    hintText.textContent = "「開始」を押して計測を始めます。";
+  }
+}
+
+function onResults(results){
+  // 画面
+  octx.clearRect(0,0,overlay.width,overlay.height);
+  octx.drawImage(results.image, 0, 0, overlay.width, overlay.height);
+
+  // 骨架（可选：绿色线+红色点）
+  if (results.poseLandmarks){
+    drawConnectors(octx, results.poseLandmarks, POSE_CONNECTIONS, {color:'#00C853', lineWidth:3});
+    drawLandmarks(octx, results.poseLandmarks, {color:'#FF5252', lineWidth:1});
+    const LSH = results.poseLandmarks[11];
+    const LHIP = results.poseLandmarks[23];
+    const LKNEE = results.poseLandmarks[25];
+
+    const ang = angleAtHip(LSH, LHIP, LKNEE); // 关键角度
+    let group = "good";
+    if (ang < TH_LOWER) group = "forward";
+    else if (ang > TH_UPPER) group = "lean";
+
+    // 文本显示
+    labelNow.textContent = `${group}（角度 ${ang.toFixed(1)}°）`;
+
+    // 计数（逐帧累加，更贴近占比）
+    counts.total++;
+    if (group === "good") counts.good++;
+    else if (group === "forward") counts.forward++;
+    else counts.lean++;
+    sampleCountEl.textContent = String(counts.total);
+
+    // 切换水母与声音（仅在状态变化时触发）
+    switchGroup(group);
+  }
+}
+
+async function detectLoop(){
+  if (!running) return;
+  await pose.send({ image: video });
+  requestAnimationFrame(detectLoop);
+}
+
+/* ===== 控制按钮 ===== */
+btnStart.onclick = async ()=>{
+  if (running) return;
+  await initCamera();
+  running = true;
+  btnStart.disabled = true;
+  btnStop.disabled = false;
+  switchGroup("good"); // 先给一个初始状态颜色
+  detectLoop();
+};
+
+btnStop.onclick = ()=>{
+  running = false;
+  btnStart.disabled = false;
+  btnStop.disabled = true;
+
+  // 关闭摄像头
+  const s = video.srcObject;
+  if (s && s.getTracks) s.getTracks().forEach(t => t.stop());
+  video.srcObject = null;
+
+  // 展示统计页
+  showReport();
+};
+
+btnSound.onclick = ()=>{
+  soundOn = !soundOn;
+  btnSound.textContent = soundOn ? "音声 ON" : "音声 OFF";
+  btnSound.classList.toggle("on", soundOn);
+};
+
+btnBack.onclick = ()=>{
+  // 重置统计
+  counts = { good:0, forward:0, lean:0, total:0 };
+  sampleCountEl.textContent = "0";
+  labelNow.textContent = "-";
+  switchGroup("idle");
+
+  // 切回实时页
+  reportView.style.display = "none";
+  appView.style.display = "block";
+};
+
+/* ===== 统计页：饼图 ===== */
+function showReport(){
+  const total = Math.max(1, counts.total);
+  const goodRate = Math.round((counts.good/total)*100);
+
+  statGood.textContent = counts.good;
+  statForward.textContent = counts.forward;
+  statLean.textContent = counts.lean;
+  statTotal.textContent = counts.total;
+  statRate.textContent = goodRate + "%";
+
+  const ctx = pieCanvas.getContext("2d");
+  ctx.clearRect(0,0,pieCanvas.width,pieCanvas.height);
+
+  const data = [
+    {label:"正しい", value:counts.good, color:"#77aaff"},
+    {label:"猫背", value:counts.forward, color:"#bcd3ff"},
+    {label:"寄りかかり", value:counts.lean, color:"#dbe8ff"},
+  ];
+  const sum = Math.max(1, data.reduce((s,d)=>s+d.value,0));
+  let start = -Math.PI/2;
+  const cx = pieCanvas.width/2, cy = pieCanvas.height/2, r = 150;
+
+  data.forEach(d=>{
+    const angle = (d.value/sum)*Math.PI*2;
+    ctx.beginPath(); ctx.moveTo(cx,cy);
+    ctx.arc(cx,cy,r,start,start+angle); ctx.closePath();
+    ctx.fillStyle = d.color; ctx.fill();
+    start += angle;
+  });
+
+  ctx.fillStyle = "#334155";
+  ctx.font = "14px system-ui";
+  ctx.fillText(`正しい: ${counts.good}`, cx - r, cy + r + 20);
+  ctx.fillText(`猫背: ${counts.forward}`, cx - r + 140, cy + r + 20);
+  ctx.fillText(`寄りかかり: ${counts.lean}`, cx - r + 260, cy + r + 20);
+
+  appView.style.display = "none";
+  reportView.style.display = "block";
+}
+</script>
+</body>
+</html>
