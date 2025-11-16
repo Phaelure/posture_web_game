@@ -1,0 +1,361 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <title>姿勢チェックミニゲーム</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>
+    :root{
+      --blue:#2b6cb0; --blue-soft:#e6f0ff;
+      --green:#2f855a; --red:#c53030;
+      --gray:#6b7280; --bg:#ffffff; --border:#bcd3ff;
+    }
+    body{margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial;background:#fff;color:#0a2540;}
+    header{padding:18px 24px;border-bottom:1px solid var(--border);}
+    header h1{margin:0;font-size:20px;color:var(--blue);}
+    .container{max-width:1100px;margin:20px auto;padding:0 20px;}
+    .card{border:1px solid var(--border);border-radius:12px;background:#fff;
+      box-shadow:0 4px 14px rgba(0,0,0,.04);padding:16px;}
+    #app-grid{display:grid;gap:16px;grid-template-columns:2fr 1fr;}
+    #videoWrap{position:relative;background:var(--blue-soft);
+      border:1px solid var(--border);border-radius:12px;
+      display:flex;align-items:center;justify-content:center;
+      min-height:420px;overflow:hidden;}
+    #webcam-canvas{display:block;max-width:100%;height:auto;}
+    #rightPane{display:flex;flex-direction:column;gap:12px;}
+    .panel{border:1px solid var(--border);border-radius:12px;padding:12px;background:#fff;}
+    .panel h3{margin:0 0 8px 0;font-size:15px;color:var(--blue);}
+    #jelly{display:flex;flex-direction:column;align-items:center;gap:8px;}
+    #jelly img{width:180px;height:auto;user-select:none;}
+    #statusText{font-size:16px;font-weight:600;color:#0f172a;text-align:center;}
+    .controls{display:flex;gap:10px;flex-wrap:wrap;}
+    button,.toggle{appearance:none;border:1px solid var(--border);background:#fff;
+      color:#0a2540;border-radius:10px;padding:10px 16px;cursor:pointer;font-weight:600;
+      box-shadow:0 2px 6px rgba(0,0,0,.05);}
+    .start{color:#fff;background:var(--blue);border-color:var(--blue);}
+    .stop{color:#fff;background:#475569;border-color:#475569;}
+    .sound.on{background:#e9f5ff;border-color:#8ab0ff;color:#0a2540;}
+    .badge{display:inline-block;padding:2px 8px;border-radius:999px;font-size:12px;
+      border:1px solid var(--border);color:#334155;background:#f8fafc;}
+    #report{display:none;}
+    #report .report-body{display:grid;gap:16px;grid-template-columns:1.2fr 1fr;}
+    #pieWrap{border:1px solid var(--border);border-radius:12px;padding:12px;
+      display:flex;align-items:center;justify-content:center;min-height:420px;}
+    #details{border:1px solid var(--border);border-radius:12px;padding:12px;}
+    .stat{display:flex;justify-content:space-between;padding:10px 0;
+      border-bottom:1px dashed #e5e7eb;font-size:15px;}
+    .stat:last-child{border-bottom:none;}
+    .hint{color:var(--gray);font-size:13px;}
+    .back{background:#0ea5e9;color:#fff;border-color:#0ea5e9;}
+    footer{text-align:center;color:var(--gray);font-size:12px;padding:18px;}
+  </style>
+</head>
+<body>
+<header class="container">
+  <h1>姿勢チェックミニゲーム</h1>
+</header>
+
+<main class="container">
+  <section id="app" class="card">
+    <div id="app-grid">
+<!-- ==== 摄像头显示区 ==== -->
+<div style="position: relative; display: inline-block;">
+  <!-- 摄像头实时画面 -->
+  <video id="webcam"
+         autoplay
+         playsinline
+         muted
+         width="640"
+         height="480"
+         style="border-radius:12px; background:#e6f0ff; border:1px solid #bcd3ff;">
+  </video>
+
+  <!-- 绘制骨架与文字提示的画布 -->
+  <canvas id="output"
+          width="640"
+          height="480"
+          style="position:absolute; top:0; left:0;">
+  </canvas>
+</div>
+
+      <!-- ✅ 右侧控制面板 -->
+      <div id="rightPane">
+        <div class="panel" id="jelly">
+          <h3>フィードバック</h3>
+          <img id="jellyImg" src="背景水母.png" alt="jellyfish">
+          <div id="statusText" class="badge">未開始</div>
+          <div class="hint" id="hintText">「開始」を押して計測を始めます。</div>
+        </div>
+
+        <div class="panel">
+          <h3>コントロール</h3>
+          <div class="controls">
+            <button class="start" id="btnStart">開始</button>
+            <button class="stop" id="btnStop" disabled>終了</button>
+            <button class="toggle sound on" id="btnSound">音声 ON</button>
+          </div>
+        </div>
+
+        <div class="panel">
+          <h3>ステータス</h3>
+          <div>サンプル数：<span id="sampleCount">0</span></div>
+          <div>現在：<span id="currentLabel">-</span></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+
+  <section id="report" class="card">
+    <h3 style="color:var(--blue);margin-top:0;">レポート</h3>
+    <div class="report-body">
+      <div id="pieWrap"><canvas id="pie" width="420" height="420"></canvas></div>
+      <div id="details">
+        <div class="stat"><span>正しい姿勢</span><strong id="statGood">0</strong></div>
+        <div class="stat"><span>猫背</span><strong id="statBad">0</strong></div>
+        <div class="stat"><span>椅子にもたれる</span><strong id="statLean">0</strong></div>
+        <div class="stat"><span>合計</span><strong id="statTotal">0</strong></div>
+        <div class="stat"><span>正しい姿勢率</span><strong id="statRate">0%</strong></div>
+        <div style="margin-top:10px;"><button class="back" id="btnBack">戻る</button></div>
+        <p class="hint" style="margin-top:10px;">※ このページは「終了」を押した後に表示されます。</p>
+      </div>
+    </div>
+  </section>
+</main>
+<footer>© Posture Mini Game</footer>
+
+<!-- 音效 -->
+<audio id="sndBubbles" src="bubbles.wav" preload="auto"></audio>
+<audio id="sndOcean" src="ocean wave.wav" preload="auto"></audio>
+
+<!-- ✅ 正确加载顺序 -->
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/pose"></script>
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils"></script>
+
+<script>
+/* ============ GLOBAL CONFIG ============ */
+// 1. 获取 video & canvas
+const video = document.getElementById("webcam");
+const canvas = document.getElementById("output");
+const ctx = canvas.getContext("2d");
+
+// 2. 启动摄像头
+navigator.mediaDevices.getUserMedia({ video: true }).then(stream => {
+  video.srcObject = stream;
+  video.play();
+});
+
+// 3. 初始化 Pose
+const pose = new Pose({
+  locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/pose/${file}`
+});
+
+pose.setOptions({
+  modelComplexity: 1,
+  smoothLandmarks: true,
+  enableSegmentation: false,
+  minDetectionConfidence: 0.5,
+  minTrackingConfidence: 0.5
+});
+
+// 4. 当每一帧分析完成时执行
+pose.onResults((results) => {
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  ctx.drawImage(results.image, 0, 0, canvas.width, canvas.height);
+  
+  // 绘制骨架（可选）
+  drawConnectors(ctx, results.poseLandmarks, POSE_CONNECTIONS, {color: '#00FF00', lineWidth: 3});
+  drawLandmarks(ctx, results.poseLandmarks, {color: '#FF0000', lineWidth: 1});
+
+  // 简单坐姿检测示例：比较肩膀与髋关节角度
+  if (results.poseLandmarks) {
+    const leftShoulder = results.poseLandmarks[11];
+    const leftHip = results.poseLandmarks[23];
+    const leftKnee = results.poseLandmarks[25];
+    const dx = leftShoulder.x - leftHip.x;
+    const dy = leftShoulder.y - leftHip.y;
+    const angle = Math.atan2(dy, dx) * 180 / Math.PI;
+
+    if (angle > 75 && angle < 105) {
+      ctx.fillStyle = 'rgba(0,255,0,0.6)';
+      ctx.fillText("Good posture!", 20, 40);
+    } else {
+      ctx.fillStyle = 'rgba(255,0,0,0.6)';
+      ctx.fillText("Fix your posture!", 20, 40);
+    }
+  }
+});
+
+// 5. 处理视频帧（持续发送）
+async function detectFrame() {
+  await pose.send({image: video});
+  requestAnimationFrame(detectFrame);
+}
+video.onplaying = () => detectFrame();
+
+/* UI 元素 */
+const appView=document.getElementById('app'),
+reportView=document.getElementById('report'),
+btnStart=document.getElementById('btnStart'),
+btnStop=document.getElementById('btnStop'),
+btnBack=document.getElementById('btnBack'),
+btnSound=document.getElementById('btnSound'),
+labelNow=document.getElementById('currentLabel'),
+sampleCountEl=document.getElementById('sampleCount'),
+jellyImg=document.getElementById('jellyImg'),
+statusText=document.getElementById('statusText'),
+hintText=document.getElementById('hintText'),
+sndBubbles=document.getElementById('sndBubbles'),
+sndOcean=document.getElementById('sndOcean'),
+statGood=document.getElementById('statGood'),
+statBad=document.getElementById('statBad'),
+statLean=document.getElementById('statLean'),
+statTotal=document.getElementById('statTotal'),
+statRate=document.getElementById('statRate'),
+pieCanvas=document.getElementById('pie');
+
+let running=false, soundOn=true, prevLabel="";
+let counts={good:0,bad:0,lean:0,total:0};
+
+/* ============ SAFE INIT ============ */
+window.addEventListener('load', async ()=>{
+  try{
+    await loadModel();
+    console.log("✅ Teachable Machine モデル読み込み完了");
+  }catch(e){
+    console.error("❌ モデル読み込み失敗",e);
+  }
+});
+
+async function loadModel(){
+  const modelURL = MODEL_URL + "model.json";
+  const metadataURL = MODEL_URL + "metadata.json";
+  model = await tmPose.load(modelURL, metadataURL);
+  maxPredictions = model.getTotalClasses();
+  const canvas=document.getElementById("webcam-canvas");
+  canvas.width=VIDEO_SIZE; canvas.height=VIDEO_SIZE;
+  ctx=canvas.getContext("2d");
+}
+
+/* ============ START/STOP ============ */
+btnStart.onclick = async () => {
+  const video = document.getElementById("webcam");
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({
+    video: { width: 640, height: 480 }
+    });
+    video.srcObject = stream;
+    await video.play();
+  } catch (err) {
+    alert("カメラのアクセスが拒否されました。");
+    console.error(err);
+    return;
+  }
+
+  running = true;
+  btnStart.disabled = true;
+  btnStop.disabled = false;
+  statusText.textContent = "計測中";
+  hintText.textContent = "カメラに座った姿勢を映してください。";
+
+  animate();  // ✅ 一定要有这行，让模型开始循环检测
+};
+
+btnStop.onclick=()=>{
+  running=false; if(webcam) webcam.stop();
+  btnStart.disabled=false; btnStop.disabled=true;
+  statusText.textContent="停止"; hintText.textContent="結果ページを表示します。";
+  showReport();
+};
+btnBack.onclick=()=>{
+  counts={good:0,bad:0,lean:0,total:0};
+  sampleCountEl.textContent="0"; labelNow.textContent="-"; prevLabel="";
+  jellyImg.src="背景水母.png";
+  statusText.textContent="未開始"; hintText.textContent="「開始」を押して計測を始めます。";
+  reportView.style.display="none"; appView.style.display="block";
+};
+btnSound.onclick=()=>{
+  soundOn=!soundOn;
+  btnSound.textContent=soundOn?"音声 ON":"音声 OFF";
+  btnSound.classList.toggle('on',soundOn);
+};
+
+/* ============ MAIN LOOP ============ */
+async function animate(){
+  if(!running) return;
+  await predict();
+  window.requestAnimationFrame(animate);
+}
+function playOnce(audioEl){
+  if(!soundOn)return;
+  try{audioEl.pause();audioEl.currentTime=0;audioEl.play();}catch(e){}
+}
+function mapLabel(label){
+  if(label.includes("正")||label.toLowerCase().includes("good"))return"good";
+  if(label.includes("猫背"))return"bad";
+  if(label.includes("寄")||label.includes("椅子"))return"lean";
+  return"bad";
+}
+async function predict(){
+  const video = document.getElementById("webcam");
+
+  // ✅ 模型对 video 当前帧进行姿势估计
+  const { pose, posenetOutput } = await model.estimatePose(video);
+  const prediction = await model.predict(posenetOutput);
+
+  let top = prediction[0];
+  for(let i=1;i<prediction.length;i++){
+    if(prediction[i].probability > top.probability) top = prediction[i];
+  }
+
+  const label = top.className || "-";
+  labelNow.textContent = `${label} (${top.probability.toFixed(2)})`;
+
+  // 画面绘制到 canvas（可选）
+  const ctx = document.getElementById("webcam-canvas").getContext("2d");
+  ctx.drawImage(video, 0, 0, 480, 480);
+
+  // 更新状态
+  const group = mapLabel(label);
+  counts.total++;
+  sampleCountEl.textContent = String(counts.total);
+  if(prevLabel!==group){
+    prevLabel=group;
+    if(group==="good"){counts.good++;jellyImg.src="正しい姿勢水母.png";statusText.textContent="Good!";hintText.textContent="ナイス！その姿勢をキープ";playOnce(sndBubbles);}
+    else if(group==="bad"){counts.bad++;jellyImg.src="猫背水母.png";statusText.textContent="猫背";hintText.textContent="胸を開き、肩を下げましょう";playOnce(sndOcean);}
+    else{counts.lean++;jellyImg.src="椅子にもたれる水母.png";statusText.textContent="椅子にもたれる";hintText.textContent="背もたれから少し離れます";playOnce(sndOcean);}
+  }
+}
+
+/* ============ REPORT ============ */
+function showReport(){
+  const total=Math.max(1,counts.total);
+  const goodRate=Math.round((counts.good/total)*100);
+  statGood.textContent=counts.good; statBad.textContent=counts.bad;
+  statLean.textContent=counts.lean; statTotal.textContent=counts.total;
+  statRate.textContent=goodRate+"%";
+  const ctxPie=pieCanvas.getContext('2d');
+  ctxPie.clearRect(0,0,pieCanvas.width,pieCanvas.height);
+  const data=[
+    {label:"正しい",value:counts.good,color:"#77aaff"},
+    {label:"猫背",value:counts.bad,color:"#bcd3ff"},
+    {label:"寄りかかり",value:counts.lean,color:"#dbe8ff"}
+  ];
+  const totalValue=Math.max(1,data.reduce((s,d)=>s+d.value,0));
+  let start=-Math.PI/2; const cx=pieCanvas.width/2,cy=pieCanvas.height/2,r=150;
+  data.forEach(d=>{
+    const angle=(d.value/totalValue)*Math.PI*2;
+    ctxPie.beginPath();ctxPie.moveTo(cx,cy);
+    ctxPie.arc(cx,cy,r,start,start+angle);ctxPie.closePath();
+    ctxPie.fillStyle=d.color;ctxPie.fill();start+=angle;
+  });
+  const baseX=cx-r,baseY=cy+r+20;
+  ctxPie.fillStyle="#334155";ctxPie.font="14px system-ui";
+  ctxPie.fillText(`正しい: ${counts.good}`,baseX,baseY);
+  ctxPie.fillText(`猫背: ${counts.bad}`,baseX+140,baseY);
+  ctxPie.fillText(`寄りかかり: ${counts.lean}`,baseX+260,baseY);
+  appView.style.display="none"; reportView.style.display="block";
+}
+</script>
+</body>
+</html>
