@@ -1,0 +1,443 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>PostureLens Game - Voice Edition</title>
+  <style>
+    :root{
+      --brand:#2BB673; --bg:#f7f8fa; --fg:#0b1215; --card:#fff;
+      --mut:#6b7785; --err:#e53935; --gold:#ffc800; --silver:#a0a0a0; --bronze:#cd7f32;
+    }
+    @media(prefers-color-scheme:dark){ :root{ --bg:#0b1114; --fg:#e6edf3; --card:#121a1f; --mut:#8b98a5; } }
+    *{box-sizing:border-box}
+    body{
+      margin:0; font:16px/1.5 -apple-system,BlinkMacSystemFont,"Hiragino Sans","Noto Sans JP",sans-serif;
+      background:var(--bg); color:var(--fg); overflow-x:hidden;
+    }
+    .wrap{max-width:920px;margin:0 auto;padding:16px}
+    .row{display:flex;gap:12px;align-items:center;flex-wrap:wrap}
+    .card{background:var(--card);border:1px solid #0001;border-radius:16px;padding:12px;margin-bottom:16px;}
+    .cam{position:relative;overflow:hidden;border-radius:12px;width:100%;aspect-ratio:16/9;background:#000;}
+    .cam canvas{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;}
+    .ctrls{justify-content:space-between}
+    .btn{
+      padding:10px 16px;border:0;border-radius:12px;background:var(--brand);color:#fff;
+      min-height:44px;font-weight:700;cursor:pointer;transition:0.1s;
+    }
+    .btn:active{transform:scale(0.96);}
+    .btn.ghost{background:#0000;color:var(--fg);border:1px solid #0002;}
+    .toggle{display:flex;align-items:center;gap:6px}
+    .toggle input{appearance:none;width:40px;height:22px;border-radius:999px;background:#c6cbd2;position:relative;outline:none;transition:.2s;}
+    .toggle input:checked{background:var(--brand)}
+    .toggle input::after{content:"";position:absolute;top:2px;left:2px;width:18px;height:18px;border-radius:50%;background:#fff;transition:.2s;box-shadow:0 1px 2px #0004;}
+    .toggle input:checked::after{left:20px}
+    .pill{padding:8px 12px;border-radius:999px;border:1px solid #0002;background:#fff;cursor:pointer;font-size:14px;}
+    .pill[data-active="1"]{background:var(--brand);color:#fff;border-color:transparent;}
+    .timer{font-weight:700;font-feature-settings:"tnum";font-size:20px;}
+    
+    /* Game Area */
+    .game-area{display:flex;gap:20px;align-items:stretch;justify-content:center;flex-wrap:wrap;margin-top:10px;}
+    #jelly-panel{
+      flex:0 0 auto;width:240px;height:260px;border-radius:20px;background:var(--card);
+      padding:16px;display:flex;flex-direction:column;align-items:center;justify-content:center;
+      box-shadow:0 4px 12px #00000008; border:1px solid #0001;
+    }
+    #jellyImg{width:180px;height:auto;user-select:none;}
+    #live-monitor{
+      flex:1;min-width:240px;height:260px;border-radius:20px;background:var(--card);
+      padding:24px;display:flex;flex-direction:column;align-items:center;justify-content:center;
+      text-align:center;box-shadow:0 4px 12px #00000008; border:1px solid #0001; position:relative;
+    }
+    .live-label{font-size:13px;color:var(--mut);margin-bottom:4px;text-transform:uppercase;letter-spacing:1px;}
+    .live-status-big{font-size:36px;font-weight:900;margin-bottom:12px;line-height:1.2;transition:color 0.3s;}
+    .live-score-box{
+      background:#f0f2f5;padding:10px 20px;border-radius:12px;font-weight:700;color:var(--fg);
+      width:100%;max-width:200px;display:flex;justify-content:space-between;
+    }
+    #combo-area{
+      margin-top:16px;height:30px;display:flex;align-items:center;justify-content:center;gap:8px;
+      opacity:0;transition:opacity 0.3s;
+    }
+    #combo-area.active{opacity:1;}
+    .combo-num{font-size:28px;font-weight:900;color:var(--brand);font-style:italic;}
+    .combo-lbl{font-size:14px;font-weight:700;color:var(--brand);}
+    .st-good{color:var(--brand);} .st-bad{color:var(--err);} .st-idle{color:var(--mut);}
+
+    /* Modals */
+    .modal-overlay{
+      position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.7);
+      display:flex;align-items:center;justify-content:center;z-index:9999;
+      opacity:0;pointer-events:none;transition:0.3s;backdrop-filter:blur(5px);
+    }
+    .modal-overlay.show{opacity:1;pointer-events:auto;}
+    .modal-card{
+      background:#fff;width:90%;max-width:400px;padding:40px 24px;border-radius:28px;
+      text-align:center;box-shadow:0 20px 50px rgba(0,0,0,0.3);
+      transform:scale(0.8);opacity:0;transition:all 0.4s cubic-bezier(0.34,1.56,0.64,1);
+    }
+    .modal-overlay.show .modal-card{transform:scale(1);opacity:1;}
+    .modal-icon{font-size:90px;margin-bottom:10px;display:block;animation:float 3s ease-in-out infinite;}
+    .medal-name{font-size:32px;font-weight:900;margin:0 0 8px 0;letter-spacing:-1px;}
+    .medal-gold{color:var(--gold);text-shadow:0 2px 10px rgba(255,200,0,0.4);}
+    .medal-silver{color:var(--silver);text-shadow:0 2px 10px rgba(160,160,160,0.4);}
+    .medal-bronze{color:var(--bronze);text-shadow:0 2px 10px rgba(205,127,50,0.4);}
+    .medal-none{color:var(--mut);}
+    .modal-msg{font-size:16px;color:var(--mut);margin-bottom:30px;font-weight:500;}
+    .modal-btn{
+      width:100%;background:var(--fg);color:#fff;border:none;padding:16px;
+      font-size:18px;font-weight:800;border-radius:16px;cursor:pointer;
+      box-shadow:0 4px 0 rgba(0,0,0,0.2);transition:0.1s;
+    }
+    .modal-btn:active{transform:translateY(4px);box-shadow:none;}
+    .modal-btn.primary{background:var(--brand);box-shadow:0 4px 0 #1e8553;}
+    .modal-btn.primary:active{box-shadow:none;}
+
+    /* Analysis */
+    .analysis-content{display:flex;flex-direction:column;align-items:center;gap:20px;}
+    .advice-box{background:#e6fffa;border:2px solid #b2f5ea;border-radius:16px;padding:20px;width:100%;text-align:left;}
+    .advice-title{font-weight:800;color:#234e52;margin-bottom:8px;display:block;font-size:15px;}
+    .advice-text{font-size:14px;color:#285e61;line-height:1.7;}
+    @keyframes float{0%,100%{transform:translateY(0);}50%{transform:translateY(-10px);}}
+    @keyframes pop{0%{transform:scale(0.8);}50%{transform:scale(1.2);}100%{transform:scale(1);}}
+    .combo-pop{animation:pop 0.2s;}
+    @media (max-width:600px){
+      .game-area{flex-direction:column;align-items:center;gap:16px;}
+      #jelly-panel,#live-monitor{width:100%;height:auto;padding:20px;}
+      #live-monitor{min-height:200px;}
+    }
+  </style>
+</head>
+<body>
+<div class="wrap">
+  <div class="card">
+    <div class="cam"><canvas id="overlay"></canvas></div>
+    <div class="row ctrls" style="margin-top:12px">
+      <div class="row" style="gap:10px">
+        <span class="toggle"><label>声</label><input id="t-voice" type="checkbox" checked/></span>
+        <span class="toggle"><label>ガイド</label><input id="t-video" type="checkbox" checked/></span>
+        <span class="timer" id="left">--:--</span>
+      </div>
+      <div class="row" id="duration">
+        <button class="pill" data-s="10">10秒</button>
+        <button class="pill" data-s="20">20秒</button>
+        <button class="pill" data-s="300">5分</button>
+      </div>
+      <div class="row">
+        <button class="btn" id="start">開始</button>
+        <button class="btn ghost" id="stop">停止</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="game-area">
+    <div id="jelly-panel">
+      <img id="jellyImg" src="背景水母.png" alt="jellyfish">
+    </div>
+    <div id="live-monitor">
+      <div class="live-label">STATUS</div>
+      <div id="live-status-text" class="live-status-big st-idle">READY</div>
+      <div class="live-score-box"><span>Score</span><span id="live-score-val">--</span></div>
+      <div id="combo-area">
+        <span id="combo-num" class="combo-num">0</span><span class="combo-lbl">COMBO!</span>
+      </div>
+      <div style="margin-top:16px;font-size:12px;color:var(--mut);">カメラを見て背筋を伸ばそう</div>
+    </div>
+  </div>
+</div>
+
+<div id="reward-modal" class="modal-overlay">
+  <div class="modal-card">
+    <div id="m-icon" class="modal-icon">🏆</div>
+    <div id="m-medal-name" class="medal-name">--</div>
+    <p id="m-msg" class="modal-msg">...</p>
+    <p style="font-size:14px;color:#999;margin-bottom:24px;">スコア: <b id="m-final-score" style="color:#333">0%</b></p>
+    <button class="modal-btn primary" id="to-analysis-btn">分析を見る ➔</button>
+  </div>
+</div>
+
+<div id="analysis-modal" class="modal-overlay">
+  <div class="modal-card">
+    <h2 class="modal-title" style="font-size:22px;color:#333;">📊 分析レポート</h2>
+    <div class="analysis-content">
+      <canvas id="pie" width="180" height="180"></canvas>
+      <ul style="width:100%;text-align:left;font-size:14px;color:var(--fg);padding:0 10px;">
+        <li style="display:flex;justify-content:space-between;margin:8px 0;border-bottom:1px solid #eee;padding-bottom:4px;"><span>✅ 正しい姿勢</span><strong id="res-good">0%</strong></li>
+        <li style="display:flex;justify-content:space-between;margin:8px 0;border-bottom:1px solid #eee;padding-bottom:4px;"><span>⚠️ 猫背 (前)</span><strong id="res-bad">0%</strong></li>
+        <li style="display:flex;justify-content:space-between;margin:8px 0;"><span>⚠️ もたれ (後)</span><strong id="res-lean">0%</strong></li>
+      </ul>
+      <div class="advice-box">
+        <span class="advice-title">💡 アドバイス</span>
+        <p id="advice-text" class="advice-text">データが不足しています。</p>
+      </div>
+    </div>
+    <div style="margin-top:24px;"><button class="modal-btn ghost" id="close-all-btn" style="border:1px solid #ddd;">閉じる</button></div>
+  </div>
+</div>
+
+<audio id="sndBubbles" src="bubbles.wav" preload="auto"></audio>
+<audio id="sndOcean"   src="ocean wave.wav" preload="auto"></audio>
+<script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.5.1/dist/confetti.browser.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@1.3.1/dist/tf.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@teachablemachine/pose@0.8.3/dist/teachablemachine-pose.min.js"></script>
+
+<script>
+let st=null, sel=300, left=0; 
+let stats={good:0,bad:0,lean:0}, samples=0;
+let combo=0, t0=0;
+
+const ov=document.getElementById('overlay'), ctx=ov.getContext('2d');
+const leftEl=document.getElementById('left');
+const liveStatus=document.getElementById('live-status-text');
+const liveScoreVal=document.getElementById('live-score-val');
+const comboArea=document.getElementById('combo-area');
+const comboNum=document.getElementById('combo-num');
+const jellyImg=document.getElementById('jellyImg');
+const voice=document.getElementById('t-voice');
+const overlayT=document.getElementById('t-video');
+
+const rewardModal=document.getElementById('reward-modal');
+const analysisModal=document.getElementById('analysis-modal');
+const mIcon=document.getElementById('m-icon'), mMedalName=document.getElementById('m-medal-name'), mMsg=document.getElementById('m-msg'), mFinalScore=document.getElementById('m-final-score');
+const pie=document.getElementById('pie'), pctx=pie.getContext('2d');
+const resGood=document.getElementById('res-good'), resBad=document.getElementById('res-bad'), resLean=document.getElementById('res-lean');
+const adviceText=document.getElementById('advice-text');
+
+const sndBubbles=document.getElementById('sndBubbles'), sndOcean=document.getElementById('sndOcean');
+let soundOn=true, currentGroup="idle";
+let lastVoiceTime = 0; // 语音冷却，防止一直说
+
+/* ★ 动漫风 TTS (Text-to-Speech) ★ */
+function speakAnime(text, priority=false) {
+  if(!voice.checked) return;
+  // 冷却检查 (除非是高优先级，如结束语)
+  const now = performance.now();
+  if(!priority && now - lastVoiceTime < 4000) return; // 4秒冷却
+  
+  lastVoiceTime = now;
+  
+  // 浏览器原生语音
+  const synth = window.speechSynthesis;
+  // 停止之前的
+  synth.cancel();
+
+  const u = new SpeechSynthesisUtterance(text);
+  u.lang = 'ja-JP';
+  u.volume = 1;
+  u.rate = 1.2;  // 稍快语速
+  u.pitch = 1.4; // 高音调 (Anime style)
+  synth.speak(u);
+}
+
+/* ★ 倒计时 滴滴声 ★ */
+function beep(freq=880, dur=100) {
+  if(!voice.checked) return;
+  try {
+    const ac = new (window.AudioContext||window.webkitAudioContext)();
+    const o=ac.createOscillator(), g=ac.createGain();
+    o.type='sine'; o.frequency.value=freq;
+    g.gain.value=0.1;
+    o.connect(g).connect(ac.destination);
+    o.start(); o.stop(ac.currentTime+dur/1000);
+  } catch(e){}
+}
+
+/* TM Setup */
+const TM_URL="https://teachablemachine.withgoogle.com/models/8xBjr0v_2/";
+let model=null, webcamTM=null, tmReady=false, detecting=false, lastPoseType="idle";
+const CLASS_MAP={"Class 1":"idle","Class 2":"good","Class 3":"forward","Class 4":"lean"};
+
+async function ensureTeachableMachine(){
+  if(tmReady) return;
+  model=await tmPose.load(TM_URL+"model.json",TM_URL+"metadata.json");
+  webcamTM=new tmPose.Webcam(640,360,true);
+  await webcamTM.setup(); await webcamTM.play();
+  ov.width=640; ov.height=360;
+  tmReady=true; startDetectLoop();
+}
+function startDetectLoop(){ if(!detecting){ detecting=true; frame(); } }
+async function frame(){
+  if(!detecting) return;
+  webcamTM.update(); await predictOnce();
+  requestAnimationFrame(frame);
+}
+async function predictOnce(){
+  if(!model||!webcamTM) return;
+  const {pose,posenetOutput}=await model.estimatePose(webcamTM.canvas);
+  const prediction=await model.predict(posenetOutput);
+  let best=prediction[0];
+  for(let p of prediction) if(p.probability>best.probability) best=p;
+  lastPoseType=CLASS_MAP[best.className]||"idle";
+  
+  ctx.clearRect(0,0,ov.width,ov.height);
+  ctx.drawImage(webcamTM.canvas,0,0,ov.width,ov.height);
+  if(overlayT.checked&&pose){
+    tmPose.drawKeypoints(pose.keypoints,0.5,ctx);
+    tmPose.drawSkeleton(pose.keypoints,0.5,ctx);
+  }
+}
+
+/* Logic */
+function updateLeft(s){
+  const m=String(Math.floor(s/60)).padStart(2,'0'), ss=String(s%60).padStart(2,'0');
+  leftEl.textContent=`${m}:${ss}`;
+}
+
+function switchGroup(group){
+  if(currentGroup===group) return;
+  currentGroup=group;
+  
+  if(group==="good") jellyImg.src="正しい姿勢水母.png";
+  else if(group==="forward") jellyImg.src="猫背水母.png";
+  else if(group==="lean") jellyImg.src="椅子にもたれる水母.png";
+  else jellyImg.src="背景水母.png";
+
+  if(group==="good"){
+    liveStatus.textContent="Good!"; liveStatus.className="live-status-big st-good";
+    if(soundOn){ sndBubbles.currentTime=0; sndBubbles.play(); }
+  } else if(group==="forward"){
+    liveStatus.textContent="猫背!"; liveStatus.className="live-status-big st-bad";
+    if(soundOn){ sndOcean.currentTime=0; sndOcean.play(); }
+    /* ★ 坏姿势温柔语音提醒 */
+    speakAnime("背筋を伸ばしてね！");
+  } else if(group==="lean"){
+    liveStatus.textContent="後傾!"; liveStatus.className="live-status-big st-bad";
+    if(soundOn){ sndOcean.currentTime=0; sndOcean.play(); }
+    /* ★ 坏姿势温柔语音提醒 */
+    speakAnime("もたれすぎだよ〜");
+  } else {
+    liveStatus.textContent="READY"; liveStatus.className="live-status-big st-idle";
+  }
+}
+
+async function start(){
+  if(st) return;
+  await ensureTeachableMachine();
+  left=sel; updateLeft(left);
+  samples=0; stats={good:0,bad:0,lean:0}; combo=0;
+  liveScoreVal.textContent='--';
+  comboArea.classList.remove('active');
+  switchGroup("idle");
+  // 确保音频上下文被激活
+  speakAnime("スタート！頑張ってね！", true);
+  st=setInterval(tick,1000);
+}
+
+function stop(){
+  if(!st) return;
+  clearInterval(st); st=null;
+  
+  const g = Math.round(stats.good/(samples||1)*100)||0;
+  
+  let icon='', medalText='', msg='', colorClass='', confettiCnt=0;
+  let voiceText = "";
+
+  if(g >= 80) {
+    icon='🥇'; medalText='金メダル'; colorClass='medal-gold';
+    msg='素晴らしい！完璧な姿勢です。';
+    voiceText = "すごーい！金メダルだよ！完璧な姿勢！";
+    confettiCnt=150;
+  } else if(g >= 60) {
+    icon='🥈'; medalText='銀メダル'; colorClass='medal-silver';
+    msg='よくできました。あと少し！';
+    voiceText = "やったね！銀メダル！とても良い感じ！";
+    confettiCnt=80;
+  } else if(g >= 40) {
+    icon='🥉'; medalText='銅メダル'; colorClass='medal-bronze';
+    msg='ナイスファイト。次は銀を目指そう。';
+    voiceText = "頑張ったね！銅メダル！次は銀メダル目指そう！";
+  } else {
+    icon='🎗️'; medalText='参加賞'; colorClass='medal-none';
+    msg='まずは意識することから始めましょう。';
+    voiceText = "お疲れ様。次はもっと頑張ろうね！";
+  }
+  
+  /* ★ 播放奖励语音 */
+  speakAnime(voiceText, true);
+
+  mIcon.textContent=icon; mMedalName.textContent=medalText; mMedalName.className="medal-name "+colorClass;
+  mMsg.textContent=msg; mFinalScore.textContent=g+'%';
+
+  rewardModal.classList.add('show');
+  switchGroup("idle");
+
+  if(confettiCnt>0){
+    confetti({particleCount:confettiCnt, spread:70, origin:{y:0.6}});
+  }
+}
+
+function tick(){
+  left--; updateLeft(left);
+  
+  /* ★ 最后3秒倒计时 滴滴声 */
+  if(left <= 3 && left > 0) {
+    beep(1000, 150); // 滴 (高频)
+  }
+
+  measure();
+  if(left<=0) stop();
+}
+
+function measure(){
+  if(!tmReady || lastPoseType==='idle') return;
+  
+  if(lastPoseType==='good'){ 
+    stats.good++; switchGroup("good"); 
+    combo++; comboNum.textContent=combo; comboArea.classList.add('active');
+    comboNum.classList.remove('combo-pop'); void comboNum.offsetWidth; comboNum.classList.add('combo-pop');
+  } else {
+    if(lastPoseType==='forward'){ stats.bad++; switchGroup("forward"); }
+    else if(lastPoseType==='lean'){ stats.lean++; switchGroup("lean"); }
+    if(combo>0) combo=0; comboArea.classList.remove('active');
+  }
+
+  samples++;
+  const g=Math.round(stats.good/samples*100)||0;
+  liveScoreVal.textContent=g+" 点";
+}
+
+document.getElementById('to-analysis-btn').onclick=function(){
+  rewardModal.classList.remove('show');
+  prepareAnalysis();
+  setTimeout(()=>{ analysisModal.classList.add('show'); }, 200);
+};
+document.getElementById('close-all-btn').onclick=function(){ analysisModal.classList.remove('show'); };
+
+function prepareAnalysis(){
+  const g=Math.round(stats.good/(samples||1)*100)||0;
+  const b=Math.round(stats.bad/(samples||1)*100)||0;
+  const l=Math.max(0,100-g-b);
+  resGood.textContent=g+'%'; resBad.textContent=b+'%'; resLean.textContent=l+'%';
+  
+  let advice="";
+  if(g>80) advice="見事です！この調子で「正しい座り方」を筋肉に覚え込ませましょう。";
+  else if(b>l && b>20) advice="「猫背」が目立ちます。画面を覗き込んでいませんか？顎を少し引き、目線を高くしましょう。";
+  else if(l>b && l>20) advice="「背もたれ」に頼りすぎています。お腹に少し力を入れ、骨盤を立てるイメージで座ってみてください。";
+  else advice="姿勢が定まっていません。足の裏を床にしっかりつけ、リラックスして座り直してみましょう。";
+  adviceText.textContent=advice;
+
+  pctx.clearRect(0,0,180,180);
+  const data=[g,b,l], colors=['#2BB673','#f59e0b','#e53935'];
+  let a=0;
+  for(let i=0;i<data.length;i++){
+    const ang=data[i]/100*Math.PI*2;
+    pctx.beginPath(); pctx.moveTo(90,90); pctx.arc(90,90,80,a,a+ang);
+    pctx.closePath(); pctx.fillStyle=colors[i]; pctx.fill(); a+=ang;
+  }
+  pctx.fillStyle='#fff'; pctx.beginPath(); pctx.arc(90,90,50,0,Math.PI*2); pctx.fill();
+}
+
+document.querySelectorAll('#duration .pill').forEach(b=>{
+  b.onclick=()=>{
+    sel=+b.dataset.s;
+    document.querySelectorAll('#duration .pill').forEach(x=>x.dataset.active=0);
+    b.dataset.active=1; updateLeft(sel);
+  };
+});
+document.querySelector('#duration .pill[data-s="300"]').dataset.active=1;
+updateLeft(300);
+document.getElementById('start').onclick=start;
+document.getElementById('stop').onclick=stop;
+</script>
+</body>
+</html>
