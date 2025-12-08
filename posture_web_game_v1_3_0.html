@@ -1,0 +1,778 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no,viewport-fit=cover"/>
+  <meta name="apple-mobile-web-app-capable" content="yes"> <meta name="mobile-web-app-capable" content="yes"> <meta name="theme-color" content="#131F24">
+  
+  <title>PostureLens - Perfect Edition</title>
+  <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@600;700;800;900&family=Roboto+Mono:wght@700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --duo-bg: #131F24; --duo-card: #202F36; --duo-text: #FFFFFF; --duo-text-muted: #8997A1;
+      --brand: #58CC02; --brand-shade: #46A302;
+      --gold: #FFD900; --gold-shade: #D9B800;
+      --err: #FF4B4B; --err-shade: #D94040;
+      --blue: #1CB0F6; --blue-shade: #1899D6;
+      --gray-btn: #37464F; --gray-btn-shade: #28333A;
+      --radius-l: 20px; --radius-m: 16px;
+    }
+
+    * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+    body {
+      margin: 0; font-family: 'Nunito', sans-serif;
+      background: var(--duo-bg); color: var(--duo-text);
+      overflow-x: hidden; font-weight: 700;
+      transition: box-shadow 0.1s;
+    }
+
+    /* Red Flash Warning */
+    @keyframes flashRed {
+      0% { box-shadow: inset 0 0 0 0 transparent; }
+      50% { box-shadow: inset 0 0 50px 20px var(--err); }
+      100% { box-shadow: inset 0 0 0 0 transparent; }
+    }
+    .screen-flash { animation: flashRed 0.6s ease-out; }
+
+    .wrap { max-width: 920px; margin: 0 auto; padding: 16px; position: relative; }
+    .row { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+
+    /* Cards */
+    .card {
+      background: var(--duo-card); border: 2px solid rgba(255,255,255,0.1);
+      border-radius: var(--radius-l); padding: 16px; margin-bottom: 16px;
+      margin-top: 20px; position: relative;
+    }
+    .cam {
+      position: relative; overflow: hidden; border-radius: var(--radius-m);
+      width: 100%; aspect-ratio: 16/9; background: #000;
+      border: 3px solid rgba(255,255,255,0.1);
+    }
+    .cam canvas { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; transform: scaleX(-1); /* Mirror effect */ }
+    
+    /* Overlays */
+    .overlay-layer {
+      position: absolute; inset: 0; display: flex; flex-direction: column; 
+      align-items: center; justify-content: center; z-index: 10; 
+      background: rgba(19, 31, 36, 0.85); border-radius: var(--radius-m);
+      transition: opacity 0.3s; pointer-events: none; opacity: 0;
+    }
+    .overlay-layer.active { opacity: 1; pointer-events: auto; }
+    
+    /* Spinner */
+    .spinner {
+      width: 50px; height: 50px; border: 6px solid var(--gray-btn);
+      border-top-color: var(--brand); border-radius: 50%;
+      animation: spin 1s linear infinite; margin-bottom: 16px;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* Countdown Text */
+    .countdown-text { font-size: 80px; font-weight: 900; color: #fff; text-shadow: 0 4px 10px rgba(0,0,0,0.5); animation: pop 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275); }
+    @keyframes pop { 0%{transform: scale(0.5); opacity:0;} 100%{transform: scale(1); opacity:1;} }
+
+    /* Controls */
+    .ctrls { justify-content: space-between; margin-top: 20px; align-items: center; gap: 20px; }
+    .btn, .pill, .modal-btn {
+      border: none; border-radius: var(--radius-m); font-family: inherit; font-weight: 800;
+      cursor: pointer; transition: all 0.1s; text-transform: uppercase; letter-spacing: 0.5px;
+      position: relative; top: 0; white-space: nowrap; outline: none;
+    }
+    .btn:active:not(:disabled), .pill:active, .modal-btn:active { top: 4px; box-shadow: none !important; }
+    .btn {
+      padding: 12px 24px; color: #fff; background: var(--brand);
+      box-shadow: 0 4px 0 var(--brand-shade); min-height: 50px; font-size: 16px;
+    }
+    .btn:disabled {
+      background: var(--gray-btn); color: var(--duo-text-muted);
+      box-shadow: 0 4px 0 var(--gray-btn-shade); cursor: not-allowed; opacity: 0.8;
+    }
+    .btn.ghost { background: var(--err); box-shadow: 0 4px 0 var(--err-shade); }
+    .btn.ghost:disabled { background: var(--gray-btn); box-shadow: 0 4px 0 var(--gray-btn-shade); color: var(--duo-text-muted); }
+
+    /* Toggles */
+    .toggle { display: flex; align-items: center; gap: 8px; font-weight: 800;}
+    .toggle input {
+      appearance: none; width: 46px; height: 26px; border-radius: 999px;
+      background: var(--gray-btn); position: relative; outline: none; transition: .2s;
+      border: 2px solid var(--duo-bg); cursor: pointer;
+    }
+    .toggle input:checked { background: var(--brand); }
+    .toggle input::after {
+      content: ""; position: absolute; top: 2px; left: 2px; width: 18px; height: 18px;
+      border-radius: 50%; background: #fff; transition: .2s; box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+    }
+    .toggle input:checked::after { left: 22px; }
+
+    /* Timer */
+    .timer-text { 
+      font-family: 'Roboto Mono', monospace; font-weight: 700; font-size: 24px; color: #fff; 
+      background: linear-gradient(135deg, rgba(255, 255, 255, 0.1), rgba(255, 255, 255, 0.05));
+      border: 1px solid rgba(255, 255, 255, 0.15); border-radius: 12px; padding: 6px 18px;
+      text-shadow: 0 0 12px rgba(255, 255, 255, 0.4);
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.1), 0 4px 10px rgba(0, 0, 0, 0.3);
+      letter-spacing: 1px; display: inline-block; min-width: 100px; text-align: center;
+    }
+    .pill {
+      padding: 8px 14px; background: var(--gray-btn); color: var(--duo-text);
+      box-shadow: 0 4px 0 var(--gray-btn-shade); font-size: 13px; border-radius: 12px;
+    }
+    .pill[data-active="1"] { background: var(--blue); box-shadow: 0 4px 0 var(--blue-shade); color: #fff; }
+
+    /* Game Area */
+    .game-area { display: flex; gap: 20px; align-items: stretch; justify-content: center; flex-wrap: wrap; margin-top: 16px; }
+    
+    #jelly-panel {
+      flex: 0 0 auto; width: 240px; height: 280px; padding: 16px;
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      transition: all 0.3s; background: transparent;
+      border: 3px solid var(--gray-btn); border-radius: var(--radius-l);
+    }
+    #jelly-panel.bg-good { border-color: var(--brand); box-shadow: 0 0 20px rgba(88,204,2,0.3); }
+    #jelly-panel.bg-bad  { border-color: var(--err); box-shadow: 0 0 20px rgba(255,75,75,0.3); }
+    #jelly-panel.bg-idle { border-color: var(--gray-btn); }
+    #jellyImg { width: 100%; height: auto; max-height: 220px; object-fit: contain; user-select: none; filter: drop-shadow(0 4px 0 rgba(0,0,0,0.2)); }
+
+    #live-monitor {
+      flex: 1; min-width: 240px; height: 280px; padding: 24px;
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      text-align: center; background: var(--duo-card);
+      border: 2px solid rgba(255,255,255,0.1); border-radius: var(--radius-l);
+    }
+    .live-label { font-size: 14px; color: var(--duo-text-muted); margin-bottom: 8px; text-transform: uppercase; letter-spacing: 1.5px; font-weight: 800;}
+    .live-status-big { font-size: 40px; font-weight: 900; margin-bottom: 16px; line-height: 1.1; transition: color 0.2s; text-shadow: 0 4px 0 rgba(0,0,0,0.2); display: inline-block; }
+    
+    .st-idle { color: var(--duo-text-muted); animation: float 3s ease-in-out infinite; }
+    .st-good { color: var(--brand); animation: bounceIn 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275); }
+    .st-bad  { color: var(--err); animation: shake 0.4s ease-in-out infinite; }
+
+    .live-score-box {
+      background: var(--duo-bg); border: 3px solid var(--blue);
+      padding: 12px 20px; border-radius: var(--radius-m); font-weight: 800; color: var(--blue);
+      width: 100%; max-width: 220px; display: flex; justify-content: space-between; align-items: center;
+      font-size: 18px; box-shadow: 0 4px 0 var(--blue-shade);
+      transition: transform 0.1s;
+    }
+    @keyframes scorePop { 0%{transform:scale(1);} 50%{transform:scale(1.2); background: #202F36;} 100%{transform:scale(1);} }
+    .score-popping { animation: scorePop 0.2s ease-out; }
+
+    #combo-area { margin-top: 24px; height: 40px; display: flex; align-items: baseline; justify-content: center; gap: 8px; opacity: 0; transition: opacity 0.3s; }
+    #combo-area.active { opacity: 1; }
+    .combo-num { font-size: 36px; font-weight: 900; color: var(--gold); font-style: italic; text-shadow: 2px 2px 0 var(--gold-shade); }
+    .combo-lbl { font-size: 16px; font-weight: 800; color: var(--gold); text-transform: uppercase;}
+    .combo-pop { animation: comboImpact 0.4s ease-out forwards; }
+    @keyframes comboImpact { 0% { transform: scale(1) rotate(0deg); } 20% { transform: scale(1.5) rotate(-10deg); text-shadow: 0 0 20px var(--gold); } 40% { transform: scale(1.5) rotate(10deg); } 100% { transform: scale(1) rotate(0deg); } }
+
+    /* Modal */
+    .modal-overlay {
+      position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.85);
+      display: flex; align-items: center; justify-content: center; z-index: 9999;
+      opacity: 0; pointer-events: none; transition: 0.3s;
+    }
+    .modal-overlay.show { opacity: 1; pointer-events: auto; }
+    .modal-card {
+      background: var(--duo-card); width: 90%; max-width: 420px; padding: 40px 30px;
+      border-radius: 24px; text-align: center; box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+      border: 3px solid rgba(255,255,255,0.1); transform: scale(0.9); opacity: 0;
+      transition: all 0.4s cubic-bezier(0.34, 1.56, 0.64, 1); color: var(--duo-text);
+      position: relative; overflow: hidden;
+    }
+    .modal-overlay.show .modal-card { transform: scale(1); opacity: 1; }
+    
+    .icon-wrapper { position: relative; width: 120px; height: 120px; margin: 0 auto 20px auto; }
+    .modal-glow-bg {
+      position: absolute; top: 50%; left: 50%; width: 200px; height: 200px;
+      background: radial-gradient(circle, rgba(255,255,255,0.2) 0%, rgba(255,255,255,0) 70%);
+      pointer-events: none; z-index: 0; animation: glowSpin 8s linear infinite;
+    }
+    .modal-icon { font-size: 100px; line-height: 1; position: relative; z-index: 1; filter: drop-shadow(0 4px 0 rgba(0,0,0,0.2)); animation: heartbeat 2s infinite ease-in-out; }
+    @keyframes heartbeat { 0% { transform: scale(1); } 15% { transform: scale(1.15); } 30% { transform: scale(1); } 45% { transform: scale(1.15); } 100% { transform: scale(1); } }
+    @keyframes glowSpin { 0% { transform: translate(-50%, -50%) rotate(0deg); opacity: 0.5; } 100% { transform: translate(-50%, -50%) rotate(360deg); opacity: 0.5; } }
+
+    .medal-name { font-size: 36px; font-weight: 900; margin: 0 0 12px 0; letter-spacing: -1px; }
+    .medal-gold { background: linear-gradient(to bottom, #FFD700 0%, #FDB931 50%, #C08209 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; filter: drop-shadow(0 2px 0 rgba(0,0,0,0.3)); }
+    .medal-silver { color: #C0C0C0; text-shadow: 0 2px 0 #888; } 
+    .medal-bronze { color: #CD7F32; text-shadow: 0 2px 0 #8B4513; }
+    .medal-none { color: var(--duo-text-muted); }
+    
+    .modal-msg { font-size: 18px; color: var(--duo-text-muted); margin-bottom: 20px; font-weight: 700; line-height: 1.6;}
+    .reward-summary { display: flex; gap: 10px; margin-bottom: 24px; justify-content: center; position: relative; z-index: 2; }
+    .reward-pill {
+      background: var(--duo-bg); border: 3px solid; box-shadow: 0 4px 0 rgba(0,0,0,0.2);
+      padding: 10px 16px; border-radius: 16px; display: flex; flex-direction: column; align-items: center;
+      min-width: 100px; transition: transform 0.2s;
+    }
+    .reward-pill:hover { transform: scale(1.05); }
+    .rp-score { border-color: var(--gold); color: var(--gold); }
+    .rp-gem { border-color: var(--blue); color: var(--blue); }
+    .rp-label { font-size: 12px; text-transform: uppercase; font-weight: 800; opacity: 0.8; margin-bottom: 4px; }
+    .rp-val { font-size: 24px; font-weight: 900; }
+
+    @keyframes btnPulse { 0% { box-shadow: 0 0 0 0 rgba(88, 204, 2, 0.7); } 70% { box-shadow: 0 0 0 10px rgba(88, 204, 2, 0); } 100% { box-shadow: 0 0 0 0 rgba(88, 204, 2, 0); } }
+    .modal-btn { width: 100%; padding: 16px; font-size: 20px; border-radius: var(--radius-m); position: relative; z-index: 2;}
+    .modal-btn.primary { background: var(--brand); color: #fff; box-shadow: 0 4px 0 var(--brand-shade); animation: btnPulse 2s infinite; }
+    #close-all-btn { background: var(--blue); color: #fff; box-shadow: 0 4px 0 var(--blue-shade); }
+    .modal-title { font-size: 26px; color: var(--duo-text); margin-bottom: 24px; font-weight: 900;}
+
+    /* Analysis & Animations */
+    @keyframes slideInUp { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
+    @keyframes shimmer { 0% { transform: translateX(-150%); } 100% { transform: translateX(150%); } }
+
+    .analysis-content { display: flex; flex-direction: column; align-items: center; gap: 24px; width: 100%;}
+    .analysis-content ul { width: 100%; padding: 0; list-style: none;}
+    .analysis-content ul li {
+      display: flex; justify-content: space-between; align-items: center; margin: 12px 0; padding: 16px;
+      background: var(--duo-bg); border-radius: var(--radius-m); font-size: 16px; font-weight: 800;
+      border: 3px solid transparent; box-shadow: 0 4px 0 rgba(0,0,0,0.2);
+      opacity: 0; position: relative; overflow: hidden;
+    }
+    .analysis-content ul li.show { animation: slideInUp 0.5s forwards; }
+    .analysis-content ul li::after {
+      content: ""; position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+      background: linear-gradient(to right, transparent 0%, rgba(255,255,255,0.1) 50%, transparent 100%);
+      transform: translateX(-150%);
+    }
+    .analysis-content ul li.show::after { animation: shimmer 2s infinite 0.5s; }
+
+    .li-good { border-color: var(--brand) !important; color: var(--brand); }
+    .li-bad  { border-color: var(--gold) !important;  color: var(--gold); }
+    .li-lean { border-color: var(--err) !important;   color: var(--err); }
+    .val-good { color: var(--brand); } .val-bad { color: var(--gold); } .val-lean { color: var(--err); }
+
+    .advice-box {
+      background: var(--duo-bg); border: 3px solid var(--blue); box-shadow: 0 4px 0 var(--blue-shade);
+      border-radius: var(--radius-m); padding: 20px; width: 100%; text-align: left;
+    }
+    .advice-title { font-weight: 900; color: var(--blue); margin-bottom: 10px; display: block; font-size: 18px; }
+    .advice-text { font-size: 15px; color: var(--duo-text); line-height: 1.8; font-weight: 700;}
+    
+    @media (max-width:600px){
+      .game-area{flex-direction:column;align-items:center;gap:16px;}
+      #jelly-panel,#live-monitor{width:100%;height:auto;padding:24px; min-height: 220px;}
+      .ctrls { justify-content: center; } .ctrls .row { justify-content: center; }
+    }
+  </style>
+</head>
+<body>
+<div class="wrap">
+  
+  <div class="card">
+    <div class="cam">
+      <canvas id="overlay"></canvas>
+      
+      <div id="loader-overlay" class="overlay-layer">
+        <div class="spinner"></div>
+        <div>AIモデルを読み込んでいます...</div>
+      </div>
+      
+      <div id="countdown-overlay" class="overlay-layer">
+        <div id="countdown-text" class="countdown-text">3</div>
+      </div>
+    </div>
+    
+    <div class="row ctrls">
+      <div class="row" style="gap:16px">
+        <span class="toggle"><label>音声</label><input id="t-voice" type="checkbox" checked/></span>
+        <span class="toggle"><label>ガイド</label><input id="t-video" type="checkbox" checked/></span>
+      </div>
+      
+      <div class="row" id="duration" style="gap: 8px; justify-content: center; flex: 1;">
+          <button class="pill" data-s="10">10秒</button>
+          <button class="pill" data-s="20">20秒</button>
+          <button class="pill" data-s="30">30秒</button>
+          <button class="pill" data-s="60">1分</button>
+          <button class="pill" data-s="300">5分</button>
+      </div>
+
+      <span class="timer-text" id="left">--:--</span>
+    </div>
+
+    <div class="row" style="margin-top: 24px;">
+      <button class="btn" id="start" style="flex:2">開始</button>
+      <button class="btn ghost" id="stop" disabled style="flex:1">停止</button>
+    </div>
+  </div>
+
+  <div class="game-area">
+    <div id="jelly-panel" class="bg-idle">
+      <img id="jellyImg" src="背景水母.png" alt="水母" onerror="this.style.display='none'; this.parentElement.innerText='(画像なし)'">
+    </div>
+    
+    <div id="live-monitor">
+      <div class="live-label">STATUS</div>
+      <div id="live-status-text" class="live-status-big st-idle">READY</div>
+      <div class="live-score-box">
+        <span>当前スコア</span>
+        <span id="live-score-val" style="font-size: 24px;">--</span>
+      </div>
+      <div id="combo-area">
+        <span id="combo-num" class="combo-num">0</span><span class="combo-lbl">COMBO!</span>
+      </div>
+      <div style="margin-top:20px;font-size:14px;color:var(--duo-text-muted);font-weight:800">カメラを見て背筋を伸ばそう</div>
+    </div>
+  </div>
+</div>
+
+<div id="reward-modal" class="modal-overlay">
+  <div class="modal-card">
+    <div class="icon-wrapper">
+      <div class="modal-glow-bg"></div>
+      <div id="m-icon" class="modal-icon">🏆</div>
+    </div>
+
+    <div id="m-medal-name" class="medal-name">--</div>
+    <p id="m-msg" class="modal-msg">...</p>
+    
+    <div class="reward-summary">
+      <div class="reward-pill rp-score">
+        <span class="rp-label">スコア</span>
+        <span class="rp-val" id="m-final-score">0%</span>
+      </div>
+      <div class="reward-pill rp-gem">
+        <span class="rp-label">最大連撃</span>
+        <span class="rp-val" id="m-max-combo">0</span>
+      </div>
+    </div>
+
+    <button class="modal-btn primary" id="to-analysis-btn">分析を見る</button>
+  </div>
+</div>
+
+<div id="analysis-modal" class="modal-overlay">
+  <div class="modal-card">
+    <h2 class="modal-title">分析レポート</h2>
+    
+    <div class="analysis-content">
+      <canvas id="pie" width="180" height="180" style="filter: drop-shadow(0 4px 0 rgba(0,0,0,0.2));"></canvas>
+      <ul>
+        <li id="li-good-el" class="li-good">
+          <span>✅ 正しい姿勢</span><strong id="res-good" class="val-good">0%</strong>
+        </li>
+        <li id="li-bad-el" class="li-bad">
+          <span>⚠️ 猫背 (前)</span><strong id="res-bad" class="val-bad">0%</strong>
+        </li>
+        <li id="li-lean-el" class="li-lean">
+          <span>⚠️ もたれ (後)</span><strong id="res-lean" class="val-lean">0%</strong>
+        </li>
+      </ul>
+      <div class="advice-box">
+        <span class="advice-title">💡 アドバイス</span>
+        <p id="advice-text" class="advice-text">データが不足しています。</p>
+      </div>
+    </div>
+    <div style="margin-top:24px; width:100%">
+      <button class="modal-btn" id="close-all-btn">閉じる</button>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.5.1/dist/confetti.browser.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@1.3.1/dist/tf.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@teachablemachine/pose@0.8.3/dist/teachablemachine-pose.min.js"></script>
+
+<script>
+/* --- CONFIG & ASSETS --- */
+const FILES = {
+  start: '001_満別花丸（ノーマル）_スタート！頑張って….wav',
+  warnNekoze: '002_No.7（ノーマル）_ほらほら、猫背ダメ….wav',
+  warnLean: '003_No.7（ノーマル）_こらこら、もたれな….wav',
+  resGold: '004_春日部つむぎ（ノーマル）_うっひょ〜！カンペ….wav',
+  resSilver: '005_春日部つむぎ（ノーマル）_おっしい！でも銀メ….wav',
+  resBronze: '006_春日部つむぎ（ノーマル）_うんうん、頑張った….wav',
+  resPart: '007_春日部つむぎ（ノーマル）_ドンマイ！参加賞あ….wav'
+};
+
+/* --- AUDIO PRELOADER --- */
+const audioCache = {};
+function preloadAudio() {
+  for (const [key, url] of Object.entries(FILES)) {
+    const a = new Audio();
+    a.src = url;
+    a.load(); // Force browser to buffer
+    audioCache[key] = a;
+  }
+}
+window.addEventListener('load', preloadAudio); // Preload on page load
+
+function playSound(key) {
+  if(!voice.checked) return;
+  const sound = audioCache[key];
+  if(sound) {
+    sound.currentTime = 0; // Reset to start
+    sound.play().catch(e => console.log("Audio Error:", e));
+  } else {
+    // Fallback if cache fails
+    new Audio(FILES[key]).play();
+  }
+}
+
+/* --- GLOBAL VARS --- */
+let st=null, sel=300, left=0; 
+let stats={good:0,bad:0,lean:0}, samples=0;
+let combo=0;
+let maxCombo=0; 
+
+const ov=document.getElementById('overlay'), ctx=ov.getContext('2d');
+const loaderOverlay=document.getElementById('loader-overlay'); 
+const countOverlay=document.getElementById('countdown-overlay');
+const countText=document.getElementById('countdown-text');
+const leftEl=document.getElementById('left');
+
+const liveStatus=document.getElementById('live-status-text');
+const liveScoreVal=document.getElementById('live-score-val');
+const comboArea=document.getElementById('combo-area');
+const comboNum=document.getElementById('combo-num');
+
+const jellyPanel=document.getElementById('jelly-panel');
+const jellyImg=document.getElementById('jellyImg');
+
+const voice=document.getElementById('t-voice');
+const overlayT=document.getElementById('t-video');
+const startBtn=document.getElementById('start');
+const stopBtn=document.getElementById('stop');
+
+const rewardModal=document.getElementById('reward-modal');
+const analysisModal=document.getElementById('analysis-modal');
+const mIcon=document.getElementById('m-icon'), mMedalName=document.getElementById('m-medal-name'), mMsg=document.getElementById('m-msg');
+const mFinalScore=document.getElementById('m-final-score'), mMaxCombo=document.getElementById('m-max-combo');
+const pie=document.getElementById('pie'), pctx=pie.getContext('2d');
+const resGood=document.getElementById('res-good'), resBad=document.getElementById('res-bad'), resLean=document.getElementById('res-lean');
+const adviceText=document.getElementById('advice-text');
+
+let currentGroup="idle";
+let lastVoiceTime = 0; 
+const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+
+function playTone(type) {
+  if(!voice.checked) return;
+  if(audioCtx.state === 'suspended') audioCtx.resume();
+  const osc = audioCtx.createOscillator();
+  const gain = audioCtx.createGain();
+  osc.connect(gain); gain.connect(audioCtx.destination);
+  const now = audioCtx.currentTime;
+  
+  if (type === 'good') {
+    osc.type = 'sine'; osc.frequency.setValueAtTime(500, now); osc.frequency.exponentialRampToValueAtTime(1000, now + 0.1);
+    gain.gain.setValueAtTime(0.1, now); gain.gain.exponentialRampToValueAtTime(0.01, now + 0.1);
+    osc.start(now); osc.stop(now + 0.1);
+  } else if (type === 'bad') {
+    osc.type = 'sawtooth'; osc.frequency.setValueAtTime(150, now); osc.frequency.linearRampToValueAtTime(100, now + 0.3);
+    gain.gain.setValueAtTime(0.1, now); gain.gain.linearRampToValueAtTime(0.01, now + 0.3);
+    osc.start(now); osc.stop(now + 0.3);
+  } else if (type === 'beep') {
+    osc.type = 'square'; osc.frequency.setValueAtTime(880, now);
+    gain.gain.setValueAtTime(0.05, now); gain.gain.linearRampToValueAtTime(0.01, now + 0.1);
+    osc.start(now); osc.stop(now + 0.1);
+  }
+}
+
+const TM_URL="https://teachablemachine.withgoogle.com/models/8xBjr0v_2/";
+let model=null, webcamTM=null, tmReady=false, detecting=false, lastPoseType="idle";
+const CLASS_MAP={"Class 1":"idle","Class 2":"good","Class 3":"forward","Class 4":"lean"};
+
+async function ensureTeachableMachine(){
+  if(tmReady) return true;
+  loaderOverlay.classList.add('active');
+  try {
+    model=await tmPose.load(TM_URL+"model.json",TM_URL+"metadata.json");
+    // Flip = true for mirror effect
+    webcamTM=new tmPose.Webcam(640,360,true); 
+    await webcamTM.setup(); await webcamTM.play();
+    ov.width=640; ov.height=360;
+    tmReady=true; 
+    loaderOverlay.classList.remove('active');
+    startDetectLoop();
+    return true;
+  } catch (err) {
+    loaderOverlay.classList.remove('active');
+    alert("カメラの起動に失敗しました。\nError: " + err);
+    resetButtons();
+    return false;
+  }
+}
+
+function startDetectLoop(){ if(!detecting){ detecting=true; frame(); } }
+async function frame(){
+  if(!detecting) return;
+  webcamTM.update(); await predictOnce();
+  requestAnimationFrame(frame);
+}
+async function predictOnce(){
+  if(!model||!webcamTM) return;
+  const {pose,posenetOutput}=await model.estimatePose(webcamTM.canvas);
+  const prediction=await model.predict(posenetOutput);
+  let best=prediction[0];
+  for(let p of prediction) if(p.probability>best.probability) best=p;
+  lastPoseType=CLASS_MAP[best.className]||"idle";
+  
+  ctx.clearRect(0,0,ov.width,ov.height);
+  // Drawing: Flip logic is handled by CSS on canvas, but for drawing keypoints we rely on TFJS
+  if(overlayT.checked){
+    ctx.save();
+    // Since we flipped the canvas via CSS, we draw normally here
+    ctx.drawImage(webcamTM.canvas,0,0,ov.width,ov.height);
+    if(pose){
+      tmPose.drawKeypoints(pose.keypoints,0.5,ctx);
+      tmPose.drawSkeleton(pose.keypoints,0.5,ctx);
+    }
+    ctx.restore();
+  } else {
+    // Just draw webcam
+    ctx.drawImage(webcamTM.canvas,0,0,ov.width,ov.height);
+  }
+}
+
+function updateLeft(s){
+  const m=String(Math.floor(s/60)).padStart(2,'0'), ss=String(s%60).padStart(2,'0');
+  leftEl.textContent=`${m}:${ss}`;
+}
+
+function triggerFlash() {
+  document.body.classList.remove('screen-flash');
+  void document.body.offsetWidth;
+  document.body.classList.add('screen-flash');
+}
+
+function switchGroup(group){
+  if(currentGroup===group) return;
+  currentGroup=group;
+  jellyPanel.className = "";
+  
+  const now = performance.now();
+  const playWarningVoice = (key) => {
+      if(now - lastVoiceTime < 4000) return;
+      lastVoiceTime = now;
+      if(voice.checked && window.speechSynthesis.speaking) window.speechSynthesis.cancel();
+      playSound(key);
+  };
+  
+  if(group==="good"){
+    jellyImg.src = "正しい姿勢水母.png"; jellyPanel.classList.add("bg-good");
+    liveStatus.textContent="Good!"; liveStatus.className="live-status-big st-good";
+    playTone('good');
+  } else if(group==="forward"){
+    jellyImg.src = "猫背水母.png"; jellyPanel.classList.add("bg-bad");
+    liveStatus.textContent="猫背!"; liveStatus.className="live-status-big st-bad";
+    triggerFlash(); 
+    playTone('bad'); 
+    playWarningVoice('warnNekoze');
+  } else if(group==="lean"){
+    jellyImg.src = "椅子にもたれる水母.png"; jellyPanel.classList.add("bg-bad");
+    liveStatus.textContent="後傾!"; liveStatus.className="live-status-big st-bad";
+    triggerFlash();
+    playTone('bad'); 
+    playWarningVoice('warnLean');
+  } else {
+    jellyImg.src = "背景水母.png"; jellyPanel.classList.add("bg-idle");
+    liveStatus.textContent="READY"; liveStatus.className="live-status-big st-idle";
+  }
+}
+
+async function start(){
+  if(st) return;
+  startBtn.disabled = true; stopBtn.disabled = false;
+  
+  const ok = await ensureTeachableMachine();
+  if(!ok) return;
+
+  if(audioCtx.state === 'suspended') await audioCtx.resume();
+
+  // Reset Stats
+  left=sel; updateLeft(left);
+  samples=0; stats={good:0,bad:0,lean:0}; combo=0; maxCombo=0;
+  liveScoreVal.textContent='--';
+  comboArea.classList.remove('active');
+  switchGroup("idle");
+
+  // --- COUNTDOWN SEQUENCE ---
+  countOverlay.classList.add('active');
+  let cnt = 3;
+  countText.textContent = cnt;
+  
+  const countTimer = setInterval(()=>{
+    cnt--;
+    if(cnt > 0) {
+      countText.textContent = cnt;
+      // Re-trigger animation
+      countText.classList.remove('pop');
+      void countText.offsetWidth;
+      countText.style.animation = 'none';
+      countText.offsetHeight; /* trigger reflow */
+      countText.style.animation = null; 
+    } else {
+      // Start Game
+      clearInterval(countTimer);
+      countText.textContent = "START!";
+      setTimeout(()=>{
+        countOverlay.classList.remove('active');
+        playSound('start'); // Zero latency start sound
+        st=setInterval(tick,1000);
+      }, 800);
+    }
+  }, 1000);
+}
+
+function animateValue(obj, start, end, duration, suffix="") {
+  let startTimestamp = null;
+  const step = (timestamp) => {
+    if (!startTimestamp) startTimestamp = timestamp;
+    const progress = Math.min((timestamp - startTimestamp) / duration, 1);
+    obj.textContent = Math.floor(progress * (end - start) + start) + suffix;
+    if (progress < 1) window.requestAnimationFrame(step);
+    else obj.textContent = end + suffix;
+  };
+  window.requestAnimationFrame(step);
+}
+
+function stop(){
+  if(!st) return;
+  clearInterval(st); st=null;
+  resetButtons();
+  
+  const g = Math.round(stats.good/(samples||1)*100)||0;
+  let icon='', medalText='', msg='', colorClass='', confettiCnt=0;
+  let audioKey = '';
+
+  if(g >= 80) {
+    icon='🥇'; medalText='金メダル'; colorClass='medal-gold';
+    msg='うっひょ〜！カンペキ！金メダルだよ、すごいすごい！'; 
+    audioKey = 'resGold'; confettiCnt=150; 
+  } else if(g >= 60) {
+    icon='🥈'; medalText='銀メダル'; colorClass='medal-silver';
+    msg='おっしい！でも銀メダル！次は絶対金メダルとれるよ！'; 
+    audioKey = 'resSilver'; confettiCnt=80;
+  } else if(g >= 40) {
+    icon='🥉'; medalText='銅メダル'; colorClass='medal-bronze';
+    msg='うんうん、頑張ったね。銅メダルゲット！この調子だよ。'; 
+    audioKey = 'resBronze'; confettiCnt=30;
+  } else {
+    icon='🎗️'; medalText='参加賞'; colorClass='medal-none';
+    msg='ドンマイ！参加賞あげる。ここから一緒に上手くなろうね！'; 
+    audioKey = 'resPart'; confettiCnt=0;
+  }
+  
+  if(voice.checked) {
+      if(window.speechSynthesis.speaking) window.speechSynthesis.cancel();
+      playSound(audioKey);
+  }
+
+  mIcon.textContent=icon; mMedalName.textContent=medalText; mMedalName.className="medal-name "+colorClass;
+  mMsg.textContent=msg;
+  mFinalScore.textContent = "0%"; mMaxCombo.textContent = "0";
+  
+  rewardModal.classList.add('show');
+  switchGroup("idle");
+
+  setTimeout(() => {
+      animateValue(mFinalScore, 0, g, 1500, "%");
+      animateValue(mMaxCombo, 0, maxCombo, 1500); 
+  }, 100);
+
+  if(confettiCnt>0) confetti({particleCount:confettiCnt, spread:70, origin:{y:0.6}});
+}
+
+function resetButtons() { startBtn.disabled = false; stopBtn.disabled = true; }
+
+function tick(){
+  left--; updateLeft(left);
+  if(left <= 3 && left > 0) playTone('beep');
+  measure();
+  if(left<=0) stop();
+}
+
+function measure(){
+  if(!tmReady || lastPoseType==='idle') return;
+  if(lastPoseType==='good'){ 
+    stats.good++; switchGroup("good"); 
+    combo++; 
+    if(combo > maxCombo) maxCombo = combo; 
+    comboNum.textContent=combo; comboArea.classList.add('active');
+    comboNum.classList.remove('combo-pop'); 
+    void comboNum.offsetWidth; 
+    comboNum.classList.add('combo-pop');
+  } else {
+    if(lastPoseType==='forward'){ stats.bad++; switchGroup("forward"); }
+    else if(lastPoseType==='lean'){ stats.lean++; switchGroup("lean"); }
+    if(combo>0) combo=0; comboArea.classList.remove('active');
+  }
+  samples++;
+  const g=Math.round(stats.good/samples*100)||0;
+  
+  if(liveScoreVal.textContent !== g + " 点") {
+    liveScoreVal.textContent = g + " 点";
+    liveScoreVal.classList.remove('score-popping');
+    void liveScoreVal.offsetWidth;
+    liveScoreVal.classList.add('score-popping');
+  }
+}
+
+document.getElementById('to-analysis-btn').onclick=function(){
+  rewardModal.classList.remove('show');
+  setTimeout(()=>{ analysisModal.classList.add('show'); prepareAnalysis(); }, 200);
+};
+document.getElementById('close-all-btn').onclick=function(){ analysisModal.classList.remove('show'); };
+
+function prepareAnalysis(){
+  const g=Math.round(stats.good/(samples||1)*100)||0;
+  const b=Math.round(stats.bad/(samples||1)*100)||0;
+  const l=Math.max(0,100-g-b);
+  
+  document.getElementById('li-good-el').classList.remove('show');
+  document.getElementById('li-bad-el').classList.remove('show');
+  document.getElementById('li-lean-el').classList.remove('show');
+  
+  setTimeout(()=>document.getElementById('li-good-el').classList.add('show'), 100);
+  setTimeout(()=>document.getElementById('li-bad-el').classList.add('show'), 300);
+  setTimeout(()=>document.getElementById('li-lean-el').classList.add('show'), 500);
+
+  animateValue(resGood, 0, g, 1000, "%");
+  animateValue(resBad, 0, b, 1000, "%");
+  animateValue(resLean, 0, l, 1000, "%");
+  
+  let advice="";
+  if(g>80) advice="見事です！この調子で「正しい座り方」を筋肉に覚え込ませましょう。";
+  else if(b>l && b>20) advice="「猫背」が目立ちます。画面を覗き込んでいませんか？顎を少し引き、目線を高くしましょう。";
+  else if(l>b && l>20) advice="「背もたれ」に頼りすぎています。お腹に少し力を入れ、骨盤を立てるイメージで座ってみてください。";
+  else advice="姿勢が定まっていません。足の裏を床にしっかりつけ、リラックスして座り直してみましょう。";
+  adviceText.textContent=advice;
+
+  const colors=['#58CC02','#FFD900','#FF4B4B'];
+  const targetAngles = [g, b, l].map(v => v/100 * Math.PI * 2);
+  let startTime = null;
+  const duration = 1000;
+
+  function drawPieAnim(timestamp) {
+    if (!startTime) startTime = timestamp;
+    const progress = Math.min((timestamp - startTime) / duration, 1);
+    const ease = 1 - Math.pow(1 - progress, 3);
+    pctx.clearRect(0,0,180,180);
+    let a = -Math.PI/2; 
+    targetAngles.forEach((target, i) => {
+      const drawAmt = target * ease;
+      if(drawAmt > 0) {
+        pctx.beginPath(); pctx.moveTo(90,90);
+        pctx.arc(90,90,80, a, a + drawAmt);
+        pctx.closePath(); pctx.fillStyle=colors[i]; pctx.fill();
+        a += drawAmt;
+      }
+    });
+    pctx.fillStyle='#202F36'; pctx.beginPath(); pctx.arc(90,90,50,0,Math.PI*2); pctx.fill();
+    if (progress < 1) requestAnimationFrame(drawPieAnim);
+  }
+  requestAnimationFrame(drawPieAnim);
+}
+
+document.querySelectorAll('#duration .pill').forEach(b=>{
+  b.onclick=()=>{
+    sel=+b.dataset.s;
+    document.querySelectorAll('#duration .pill').forEach(x=>x.dataset.active=0);
+    b.dataset.active=1; updateLeft(sel);
+  };
+});
+document.querySelector('#duration .pill[data-s="300"]').dataset.active=1;
+updateLeft(300);
+document.getElementById('start').onclick=start;
+document.getElementById('stop').onclick=stop;
+</script>
+</body>
+</html>
